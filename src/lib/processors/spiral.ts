@@ -1,35 +1,22 @@
-import sharp from 'sharp';
+import { toGrayscale } from './imageUtils';
 
-interface SpiralOptions {
-  spacing?: number;
-  maxDisplacement?: number;
-}
+interface SpiralOptions { spacing?: number; maxDisplacement?: number; }
 
-export async function processSpiral(imageBuffer: Buffer, options: SpiralOptions = {}): Promise<string> {
+export function processSpiral(imageData: ImageData, options: SpiralOptions = {}): string {
   const { spacing = 7, maxDisplacement = 8 } = options;
-
-  const { data, info } = await sharp(imageBuffer)
-    .resize(700, 700, { fit: 'inside', withoutEnlargement: true })
-    .grayscale()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
-
-  const { width, height } = info;
+  const { width, height } = imageData;
+  const gray = toGrayscale(imageData);
   const cx = width / 2, cy = height / 2;
   const maxR = Math.min(width, height) / 2 - 2;
-
   const pts: string[] = [];
-  const step = 0.05;
 
-  for (let angle = 0; ; angle += step) {
+  for (let angle = 0; ; angle += 0.05) {
     const r = (angle * spacing) / (2 * Math.PI);
     if (r > maxR) break;
-
     const x = cx + r * Math.cos(angle);
     const y = cy + r * Math.sin(angle);
-
     if (x >= 0 && x < width && y >= 0 && y < height) {
-      const brightness = data[Math.floor(y) * width + Math.floor(x)] / 255;
+      const brightness = gray[Math.floor(y) * width + Math.floor(x)] / 255;
       const disp = (1 - brightness) * maxDisplacement;
       const nx = x + disp * Math.cos(angle + Math.PI / 2);
       const ny = y + disp * Math.sin(angle + Math.PI / 2);
