@@ -26,6 +26,18 @@ interface StyleOptions {
   waves: { rowSpacing: number; maxAmplitude: number };
 }
 
+const PAPER_SIZES: Record<string, [number, number]> = {
+  A6: [105, 148],
+  A5: [148, 210],
+  A4: [210, 297],
+  A3: [297, 420],
+  A2: [420, 594],
+  A1: [594, 841],
+  Letter: [216, 279],
+  Legal: [216, 356],
+  Custom: [200, 200],
+};
+
 const defaultOptions: StyleOptions = {
   lineArt: { threshold: 40, blur: 1.5 },
   stippling: { numPoints: 15000, maxRadius: 3 },
@@ -182,8 +194,10 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<"original" | "preview">("original");
   const [isDragging, setIsDragging] = useState(false);
   const [options, setOptions] = useState<StyleOptions>(defaultOptions);
-  const [gcodeWidthMm, setGcodeWidthMm] = useState(200);
-  const [gcodeHeightMm, setGcodeHeightMm] = useState(200);
+  const [paperSize, setPaperSize] = useState("A4");
+  const [orientation, setOrientation] = useState<"portrait" | "landscape">("portrait");
+  const [gcodeWidthMm, setGcodeWidthMm] = useState(210);
+  const [gcodeHeightMm, setGcodeHeightMm] = useState(297);
   const [gcodeFeedRate, setGcodeFeedRate] = useState(3000);
   const [gcodePenUpCmd, setGcodePenUpCmd] = useState("M3 S0");
   const [gcodePenDownCmd, setGcodePenDownCmd] = useState("M3 S30");
@@ -287,6 +301,18 @@ export default function Home() {
       if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
     };
   }, [imagePreviewUrl]);
+
+  useEffect(() => {
+    if (paperSize === "Custom") return;
+    const [w, h] = PAPER_SIZES[paperSize];
+    if (orientation === "portrait") {
+      setGcodeWidthMm(w);
+      setGcodeHeightMm(h);
+    } else {
+      setGcodeWidthMm(h);
+      setGcodeHeightMm(w);
+    }
+  }, [paperSize, orientation]);
 
   const renderOptions = () => {
     switch (selectedStyle) {
@@ -644,6 +670,29 @@ export default function Home() {
                       G-code Settings
                     </label>
                     <div className="flex flex-col gap-3">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs text-zinc-500">Paper Size</span>
+                        <select
+                          value={paperSize}
+                          onChange={(e) => setPaperSize(e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-sm text-zinc-100 focus:outline-none focus:border-zinc-500"
+                        >
+                          {Object.keys(PAPER_SIZES).map((s) => (
+                            <option key={s} value={s}>{s === "Custom" ? "Custom" : `${s} (${PAPER_SIZES[s][0]}×${PAPER_SIZES[s][1]}mm)`}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex gap-2">
+                        {(["portrait", "landscape"] as const).map((o) => (
+                          <button
+                            key={o}
+                            onClick={() => setOrientation(o)}
+                            className={`flex-1 py-1.5 rounded text-xs font-medium border transition-colors ${orientation === o ? "bg-white text-zinc-950 border-white" : "bg-transparent text-zinc-400 border-zinc-700 hover:border-zinc-500"}`}
+                          >
+                            {o === "portrait" ? "↕ Portrait" : "↔ Landscape"}
+                          </button>
+                        ))}
+                      </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div className="flex flex-col gap-1">
                           <span className="text-xs text-zinc-500">Width (mm)</span>
@@ -652,7 +701,7 @@ export default function Home() {
                             value={gcodeWidthMm}
                             min={50}
                             max={1000}
-                            onChange={(e) => setGcodeWidthMm(Number(e.target.value))}
+                            onChange={(e) => { setPaperSize("Custom"); setGcodeWidthMm(Number(e.target.value)); }}
                             className="w-full"
                           />
                         </div>
@@ -663,7 +712,7 @@ export default function Home() {
                             value={gcodeHeightMm}
                             min={50}
                             max={1000}
-                            onChange={(e) => setGcodeHeightMm(Number(e.target.value))}
+                            onChange={(e) => { setPaperSize("Custom"); setGcodeHeightMm(Number(e.target.value)); }}
                             className="w-full"
                           />
                         </div>
