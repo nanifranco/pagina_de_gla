@@ -7,7 +7,7 @@ import { processStippling } from "@/lib/processors/stippling";
 import { processHatching } from "@/lib/processors/hatching";
 import { processCrosshatch } from "@/lib/processors/crosshatch";
 import { processSpiral } from "@/lib/processors/spiral";
-import { processWaves } from "@/lib/processors/waves";
+import { processTypewriter } from "@/lib/processors/typewriter";
 
 type StyleType =
   | "lineArt"
@@ -15,15 +15,15 @@ type StyleType =
   | "hatching"
   | "crosshatch"
   | "spiral"
-  | "waves";
+  | "typewriter";
 
 interface StyleOptions {
-  lineArt: { threshold: number; blur: number };
+  lineArt: { numStrokes: number; strokeLength: number; noiseInfluence: number };
   stippling: { numPoints: number; maxRadius: number };
   hatching: { lineSpacing: number; angle: number; threshold: number };
   crosshatch: { lineSpacing: number };
   spiral: { spacing: number; maxDisplacement: number };
-  waves: { rowSpacing: number; maxAmplitude: number };
+  typewriter: { cols: number; contrast: number };
 }
 
 const PAPER_SIZES: Record<string, [number, number]> = {
@@ -39,12 +39,12 @@ const PAPER_SIZES: Record<string, [number, number]> = {
 };
 
 const defaultOptions: StyleOptions = {
-  lineArt: { threshold: 40, blur: 1.5 },
+  lineArt: { numStrokes: 10000, strokeLength: 14, noiseInfluence: 0.35 },
   stippling: { numPoints: 15000, maxRadius: 3 },
   hatching: { lineSpacing: 8, angle: 45, threshold: 0.7 },
   crosshatch: { lineSpacing: 8 },
   spiral: { spacing: 7, maxDisplacement: 8 },
-  waves: { rowSpacing: 10, maxAmplitude: 10 },
+  typewriter: { cols: 80, contrast: 1.2 },
 };
 
 interface StyleDef {
@@ -60,7 +60,7 @@ const styles: StyleDef[] = [
   { id: "hatching", name: "Hatching", desc: "Diagonal line shading", icon: "HA" },
   { id: "crosshatch", name: "Crosshatch", desc: "Multi-angle line layers", icon: "CH" },
   { id: "spiral", name: "Spiral", desc: "Archimedean continuous path", icon: "SP" },
-  { id: "waves", name: "Waves", desc: "Sine rows by brightness", icon: "WA" },
+  { id: "typewriter", name: "Typewriter", desc: "Characters mapped by brightness", icon: "TW" },
 ];
 
 async function processImageClientSide(
@@ -86,7 +86,7 @@ async function processImageClientSide(
     case 'hatching': return processHatching(imageData, options);
     case 'crosshatch': return processCrosshatch(imageData, options);
     case 'spiral': return processSpiral(imageData, options);
-    case 'waves': return processWaves(imageData, options);
+    case 'typewriter': return processTypewriter(imageData, options);
     default: throw new Error('Unknown style');
   }
 }
@@ -129,9 +129,12 @@ function StyleIcon({ id }: { id: StyleType }) {
   const size = 28;
   if (id === "lineArt") {
     return (
-      <svg width={size} height={size} viewBox="0 0 28 28" fill="none">
-        <rect x="4" y="13" width="20" height="2" fill="currentColor" opacity="0.3" />
-        <path d="M8 8 L20 8 M6 12 L22 12 M4 16 L24 16 M6 20 L22 20 M8 24 L20 24" stroke="currentColor" strokeWidth="1.2" />
+      <svg width={size} height={size} viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round">
+        <path d="M4 22 C6 18 8 16 10 14 C12 12 13 10 14 8" opacity="0.5"/>
+        <path d="M6 24 C8 20 10 17 12 15 C14 13 15 11 16 9" opacity="0.7"/>
+        <path d="M8 24 C10 21 12 18 14 16 C16 14 17 12 18 10"/>
+        <path d="M11 24 C13 21 15 19 17 17 C19 15 20 13 20 11" opacity="0.8"/>
+        <path d="M14 24 C16 22 18 20 20 18 C22 16 22 14 22 12" opacity="0.6"/>
       </svg>
     );
   }
@@ -170,13 +173,12 @@ function StyleIcon({ id }: { id: StyleType }) {
       </svg>
     );
   }
-  if (id === "waves") {
+  if (id === "typewriter") {
     return (
-      <svg width={size} height={size} viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="1.2">
-        <path d="M2 7 Q5 4 8 7 Q11 10 14 7 Q17 4 20 7 Q23 10 26 7" />
-        <path d="M2 13 Q5 9 8 13 Q11 17 14 13 Q17 9 20 13 Q23 17 26 13" />
-        <path d="M2 19 Q5 16 8 19 Q11 22 14 19 Q17 16 20 19 Q23 22 26 19" />
-        <path d="M2 25 Q5 22 8 25 Q11 28 14 25 Q17 22 20 25 Q23 28 26 25" />
+      <svg width={size} height={size} viewBox="0 0 28 28" fill="currentColor">
+        <text x="2" y="10" fontSize="7" fontFamily="monospace">MB</text>
+        <text x="2" y="17" fontSize="7" fontFamily="monospace">FO</text>
+        <text x="2" y="24" fontSize="7" fontFamily="monospace">A .</text>
       </svg>
     );
   }
@@ -319,8 +321,9 @@ export default function Home() {
       case "lineArt":
         return (
           <div className="flex flex-col gap-3">
-            <SliderRow label="Edge Threshold" value={options.lineArt.threshold} min={10} max={120} step={1} onChange={(v) => setOpt("lineArt", "threshold", v)} />
-            <SliderRow label="Blur Sigma" value={options.lineArt.blur} min={0.5} max={3} step={0.1} onChange={(v) => setOpt("lineArt", "blur", v)} />
+            <SliderRow label="Stroke Count" value={options.lineArt.numStrokes} min={2000} max={25000} step={500} onChange={(v) => setOpt("lineArt", "numStrokes", v)} />
+            <SliderRow label="Stroke Length" value={options.lineArt.strokeLength} min={6} max={28} step={1} onChange={(v) => setOpt("lineArt", "strokeLength", v)} />
+            <SliderRow label="Flow Noise" value={options.lineArt.noiseInfluence} min={0} max={1} step={0.05} onChange={(v) => setOpt("lineArt", "noiseInfluence", v)} />
           </div>
         );
       case "stippling":
@@ -351,11 +354,11 @@ export default function Home() {
             <SliderRow label="Max Displacement" value={options.spiral.maxDisplacement} min={3} max={14} step={0.5} onChange={(v) => setOpt("spiral", "maxDisplacement", v)} />
           </div>
         );
-      case "waves":
+      case "typewriter":
         return (
           <div className="flex flex-col gap-3">
-            <SliderRow label="Row Spacing" value={options.waves.rowSpacing} min={6} max={20} step={1} onChange={(v) => setOpt("waves", "rowSpacing", v)} />
-            <SliderRow label="Max Amplitude" value={options.waves.maxAmplitude} min={4} max={18} step={0.5} onChange={(v) => setOpt("waves", "maxAmplitude", v)} />
+            <SliderRow label="Columns" value={options.typewriter.cols} min={40} max={120} step={5} onChange={(v) => setOpt("typewriter", "cols", v)} />
+            <SliderRow label="Contrast" value={options.typewriter.contrast} min={0.8} max={2} step={0.05} onChange={(v) => setOpt("typewriter", "contrast", v)} />
           </div>
         );
     }
