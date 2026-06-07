@@ -8,6 +8,7 @@ import { processHatching } from "@/lib/processors/hatching";
 import { processCrosshatch } from "@/lib/processors/crosshatch";
 import { processSpiral } from "@/lib/processors/spiral";
 import { processTypewriter } from "@/lib/processors/typewriter";
+import { analyzeImageWithClaude, buildEnhancedSubjectMask } from "@/lib/claudeVision";
 
 type StyleType =
   | "lineArt"
@@ -66,7 +67,8 @@ const styles: StyleDef[] = [
 async function processImageClientSide(
   file: File,
   style: string,
-  options: Record<string, number>
+  options: Record<string, number>,
+  subjectMask?: Uint8Array
 ): Promise<string> {
   const bitmap = await createImageBitmap(file);
   const MAX = 700;
@@ -81,7 +83,7 @@ async function processImageClientSide(
   bitmap.close();
 
   switch (style) {
-    case 'lineArt': return processLineArt(imageData, options);
+    case 'lineArt': return processLineArt(imageData, { ...options, subjectMask });
     case 'stippling': return processStippling(imageData, options);
     case 'hatching': return processHatching(imageData, options);
     case 'crosshatch': return processCrosshatch(imageData, options);
@@ -89,6 +91,19 @@ async function processImageClientSide(
     case 'typewriter': return processTypewriter(imageData, options);
     default: throw new Error('Unknown style');
   }
+}
+
+async function getImageDataForAnalysis(file: File): Promise<ImageData> {
+  const bitmap = await createImageBitmap(file);
+  const MAX = 700;
+  const scale = Math.min(1, MAX / Math.max(bitmap.width, bitmap.height));
+  const w = Math.round(bitmap.width * scale);
+  const h = Math.round(bitmap.height * scale);
+  const canvas = new OffscreenCanvas(w, h);
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  bitmap.close();
+  return ctx.getImageData(0, 0, w, h);
 }
 
 function SliderRow({
@@ -192,6 +207,7 @@ export default function Home() {
   const [selectedStyle, setSelectedStyle] = useState<StyleType>("lineArt");
   const [processedSvg, setProcessedSvg] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"original" | "preview">("original");
   const [isDragging, setIsDragging] = useState(false);
@@ -204,7 +220,25 @@ export default function Home() {
   const [gcodePenUpCmd, setGcodePenUpCmd] = useState("M3 S0");
   const [gcodePenDownCmd, setGcodePenDownCmd] = useState("M3 S30");
 
+  const [claudeApiKey, setClaudeApiKey] = useState("");
+  const [useAiAnalysis, setUseAiAnalysis] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState("");
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("claude_api_key");
+    if (saved) { setClaudeApiKey(saved); setApiKeyInput(saved); }
+  }, []);
+
+  const saveApiKey = useCallback(() => {
+    const trimmed = apiKeyInput.trim();
+    setClaudeApiKey(trimmed);
+    if (trimmed) localStorage.setItem("claude_api_key", trimmed);
+    else localStorage.removeItem("claude_api_key");
+    setShowSettings(false);
+  }, [apiKeyInput]);
 
   const setOpt = useCallback(
     <K extends StyleType>(style: K, key: keyof StyleOptions[K], value: number) => {
@@ -253,12 +287,26 @@ export default function Home() {
     if (!imageFile) return;
     setIsProcessing(true);
     setError(null);
+    setProcessingStatus("");
+
+    let subjectMask: Uint8Array | undefined;
 
     try {
+      if (useAiAnalysis && claudeApiKey && selectedStyle === "lineArt") {
+        setProcessingStatus("Analyzing image with Claude...");
+        const imageData = await getImageDataForAnalysis(imageFile);
+        const analysis = await analyzeImageWithClaude(imageData, claudeApiKey);
+        if (analysis) {
+          subjectMask = buildEnhancedSubjectMask(analysis, imageData.width, imageData.height);
+        }
+      }
+
+      setProcessingStatus("Generating art...");
       const svgText = await processImageClientSide(
         imageFile,
         selectedStyle,
-        options[selectedStyle] as Record<string, number>
+        options[selectedStyle] as Record<string, number>,
+        subjectMask
       );
       setProcessedSvg(svgText);
       setActiveTab("preview");
@@ -266,8 +314,9 @@ export default function Home() {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsProcessing(false);
+      setProcessingStatus("");
     }
-  }, [imageFile, selectedStyle, options]);
+  }, [imageFile, selectedStyle, options, useAiAnalysis, claudeApiKey]);
 
   const handleDownloadSvg = useCallback(() => {
     if (!processedSvg) return;
@@ -379,7 +428,63 @@ export default function Home() {
             <span className="text-xs text-zinc-400">Art ready</span>
           </div>
         )}
+        {claudeApiKey && (
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-violet-950 border border-violet-700">
+            <div className="w-1.5 h-1.5 rounded-full bg-violet-400" />
+            <span className="text-xs text-violet-300">Claude AI</span>
+          </div>
+        )}
+        <button
+          onClick={() => setShowSettings((v) => !v)}
+          className="p-2 rounded-lg border border-zinc-700 text-zinc-400 hover:text-zinc-100 hover:border-zinc-500 transition-colors"
+          title="Settings"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
       </header>
+
+      {/* Settings panel */}
+      {showSettings && (
+        <div className="border-b border-zinc-800 bg-zinc-900 px-6 py-5">
+          <div className="max-w-lg flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-zinc-200">Claude API Settings</h2>
+              <button onClick={() => setShowSettings(false)} className="text-zinc-500 hover:text-zinc-300 text-xs">Close</button>
+            </div>
+            <p className="text-xs text-zinc-500">
+              Enter your Claude API key to enable AI-enhanced subject detection for Line Art.
+              The key is stored only in your browser&apos;s local storage and sent directly to Anthropic.
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="password"
+                value={apiKeyInput}
+                onChange={(e) => setApiKeyInput(e.target.value)}
+                placeholder="sk-ant-..."
+                className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-violet-500"
+                onKeyDown={(e) => e.key === "Enter" && saveApiKey()}
+              />
+              <button
+                onClick={saveApiKey}
+                className="px-4 py-2 rounded bg-violet-700 hover:bg-violet-600 text-white text-sm font-medium transition-colors"
+              >
+                Save
+              </button>
+              {claudeApiKey && (
+                <button
+                  onClick={() => { setApiKeyInput(""); setClaudeApiKey(""); localStorage.removeItem("claude_api_key"); setShowSettings(false); }}
+                  className="px-4 py-2 rounded bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 text-zinc-400 text-sm transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main layout */}
       <div className="flex flex-1 overflow-hidden">
@@ -510,6 +615,24 @@ export default function Home() {
               </div>
             </div>
 
+            {/* AI Enhancement toggle — only shown when API key is set and lineArt is selected */}
+            {claudeApiKey && selectedStyle === "lineArt" && (
+              <button
+                onClick={() => setUseAiAnalysis((v) => !v)}
+                className={`w-full py-2.5 rounded-lg text-sm font-medium border transition-colors flex items-center justify-center gap-2 ${
+                  useAiAnalysis
+                    ? "bg-violet-950 border-violet-600 text-violet-200"
+                    : "bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500"
+                }`}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2a7 7 0 0 1 7 7 7 7 0 0 1-7 7 7 7 0 0 1-7-7 7 7 0 0 1 7-7z"/>
+                  <path d="M12 9v6M9 12h6"/>
+                </svg>
+                {useAiAnalysis ? "AI Enhanced: ON" : "AI Enhanced: OFF"}
+              </button>
+            )}
+
             {/* Generate button */}
             <button
               onClick={handleGenerate}
@@ -544,7 +667,7 @@ export default function Home() {
                       strokeLinecap="round"
                     />
                   </svg>
-                  PROCESSING...
+                  {processingStatus || "PROCESSING..."}
                 </span>
               ) : (
                 "GENERATE"

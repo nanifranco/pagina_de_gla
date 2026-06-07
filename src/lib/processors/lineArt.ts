@@ -4,6 +4,7 @@ interface LineArtOptions {
   numStrokes?: number;
   strokeLength?: number;
   noiseInfluence?: number;
+  subjectMask?: Uint8Array; // optional pre-computed mask from Claude Vision
 }
 
 // Separable 1D Gaussian — O(n·k) instead of O(n·k²) for large sigmas
@@ -146,12 +147,12 @@ function localTexture(gray: Uint8Array, width: number, height: number): Uint8Arr
 }
 
 export function processLineArt(imageData: ImageData, options: LineArtOptions = {}): string {
-  const { numStrokes = 10000, strokeLength = 14, noiseInfluence = 0.35 } = options;
+  const { numStrokes = 10000, strokeLength = 14, noiseInfluence = 0.35, subjectMask } = options;
   const { width, height } = imageData;
 
   const gray      = toGrayscale(imageData);
   const smoothed  = gaussianBlur(gray, width, height, 1.2);
-  const subject   = buildSubjectMask(gray, width, height);
+  const subject   = subjectMask ?? buildSubjectMask(gray, width, height);
   const boundary  = maskEdges(subject, width, height);
   const texture   = localTexture(gray, width, height);
   const { gx, gy } = computeGradient(smoothed, width, height);
