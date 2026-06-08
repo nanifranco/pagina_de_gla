@@ -89,7 +89,7 @@ export function processTypewriter(imageData: ImageData, options: TypewriterOptio
   const fill = invert ? 'white' : 'black';
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgWidth} ${svgHeight}" style="max-width:100%;height:auto;display:block;">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgWidth} ${svgHeight}" width="${svgWidth}" height="${svgHeight}" style="max-width:100%;height:auto;display:block;">
   <rect width="${svgWidth}" height="${svgHeight}" fill="${bg}"/>
   <g font-family="Courier New, Courier, monospace" font-size="${svgFontSize}" fill="${fill}" xml:space="preserve">
     ${lines.join('\n    ')}
