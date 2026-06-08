@@ -93,23 +93,17 @@ function borderBrightness(gray: Uint8Array, width: number, height: number): numb
 // high value = likely subject, low value = likely background
 function buildSubjectMask(gray: Uint8Array, width: number, height: number): Uint8Array {
   const bgVal = borderBrightness(gray, width, height);
-  const cx = width / 2, cy = height / 2;
-  const maxD = Math.sqrt(cx * cx + cy * cy);
   const raw = new Uint8Array(width * height);
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      // How different is this pixel from the estimated background?
-      const diff = Math.min(255, Math.abs(gray[y * width + x] - bgVal) * 2.8);
-      // Soft center-of-frame bias (subject is usually not at the corners)
-      const dx = (x - cx) / maxD, dy = (y - cy) / maxD;
-      const center = Math.exp(-(dx * dx + dy * dy) * 1.4) * 75;
-      raw[y * width + x] = Math.min(255, diff + center);
+      // Purely color-difference based — no center bias that contaminates background areas
+      raw[y * width + x] = Math.min(255, Math.abs(gray[y * width + x] - bgVal) * 5.0);
     }
   }
 
-  // Blur heavily so the mask has smooth, gradual boundaries
-  return separableBlur(raw, width, height, 7);
+  // Tighter blur (sigma 4 instead of 7) to avoid spreading subject values into background
+  return separableBlur(raw, width, height, 4);
 }
 
 // Sobel applied to the mask → gives us the silhouette boundary
@@ -172,7 +166,7 @@ export function processLineArt(imageData: ImageData, options: LineArtOptions = {
       if (x < 1 || x >= width - 1 || y < 1 || y >= height - 1) break;
       const ix = Math.round(x), iy = Math.round(y);
       const idx = iy * width + ix;
-      if (subject[idx] < 50) break; // stop when leaving subject zone
+      if (subject[idx] < 60) break; // stop when leaving subject zone
 
       const dGx = gx[idx], dGy = gy[idx];
       const gradMag = Math.sqrt(dGx * dGx + dGy * dGy);
@@ -224,7 +218,7 @@ export function processLineArt(imageData: ImageData, options: LineArtOptions = {
     const bx = Math.max(0, Math.min(width - 1, Math.round(sx)));
     const by = Math.max(0, Math.min(height - 1, Math.round(sy)));
     const mask = subject[by * width + bx] / 255;
-    if (mask < 0.45) continue; // hard background gate
+    if (mask < 0.50) continue; // hard background gate
     const gMag = Math.sqrt(gx[by * width + bx] ** 2 + gy[by * width + bx] ** 2);
     const tex  = texture[by * width + bx] / 255;
     if (rng() > Math.min(1, (gMag / 18 + tex * 0.6) * mask)) continue;
@@ -243,8 +237,8 @@ export function processLineArt(imageData: ImageData, options: LineArtOptions = {
     const maskNorm = subject[by * width + bx] / 255;
 
     // Hard background gate — no strokes outside subject
-    if (maskNorm < 0.42) continue;
-    const maskFactor = Math.min(1, (maskNorm - 0.42) / 0.58);
+    if (maskNorm < 0.50) continue;
+    const maskFactor = Math.min(1, (maskNorm - 0.50) / 0.50);
 
     const bright = smoothed[by * width + bx] / 255;
     const tex    = texture[by * width + bx] / 255;
