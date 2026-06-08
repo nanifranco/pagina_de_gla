@@ -7,7 +7,7 @@ import { processStippling } from "@/lib/processors/stippling";
 import { processHatching } from "@/lib/processors/hatching";
 import { processCrosshatch } from "@/lib/processors/crosshatch";
 import { processSpiral } from "@/lib/processors/spiral";
-import { processTypewriter } from "@/lib/processors/typewriter";
+import { processTypewriter, CHAR_SET_NAMES } from "@/lib/processors/typewriter";
 import { processEngraving } from "@/lib/processors/engraving";
 import { analyzeImageWithClaude, buildEnhancedSubjectMask } from "@/lib/claudeVision";
 
@@ -26,7 +26,7 @@ interface StyleOptions {
   hatching: { lineSpacing: number; angle: number; threshold: number };
   crosshatch: { lineSpacing: number };
   spiral: { spacing: number; maxDisplacement: number };
-  typewriter: { cols: number; contrast: number };
+  typewriter: { cols: number; contrast: number; brightness: number; charSet: number; invert: number };
   engraving: { minSpacing: number; maxSpacing: number };
 }
 
@@ -48,7 +48,7 @@ const defaultOptions: StyleOptions = {
   hatching: { lineSpacing: 8, angle: 45, threshold: 0.7 },
   crosshatch: { lineSpacing: 8 },
   spiral: { spacing: 7, maxDisplacement: 8 },
-  typewriter: { cols: 80, contrast: 1.2 },
+  typewriter: { cols: 120, contrast: 20, brightness: 0, charSet: 0, invert: 0 },
   engraving: { minSpacing: 2, maxSpacing: 18 },
 };
 
@@ -424,8 +424,42 @@ export default function Home() {
       case "typewriter":
         return (
           <div className="flex flex-col gap-3">
-            <SliderRow label="Columns" value={options.typewriter.cols} min={40} max={120} step={5} onChange={(v) => setOpt("typewriter", "cols", v)} />
-            <SliderRow label="Contrast" value={options.typewriter.contrast} min={0.8} max={2} step={0.05} onChange={(v) => setOpt("typewriter", "contrast", v)} />
+            <SliderRow label="Columns" value={options.typewriter.cols} min={40} max={240} step={4} onChange={(v) => setOpt("typewriter", "cols", v)} />
+            <SliderRow label="Contrast" value={options.typewriter.contrast} min={-80} max={120} step={2} onChange={(v) => setOpt("typewriter", "contrast", v)} />
+            <SliderRow label="Brightness" value={options.typewriter.brightness} min={-60} max={60} step={2} onChange={(v) => setOpt("typewriter", "brightness", v)} />
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-zinc-400">Character Set</span>
+              <div className="flex flex-wrap gap-1">
+                {CHAR_SET_NAMES.map((name, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setOpt("typewriter", "charSet", i)}
+                    className={`px-2 py-1 rounded text-xs border transition-colors ${
+                      options.typewriter.charSet === i
+                        ? "bg-white text-zinc-950 border-white"
+                        : "bg-transparent text-zinc-400 border-zinc-700 hover:border-zinc-500"
+                    }`}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              {(["Normal", "Inverted"] as const).map((label, i) => (
+                <button
+                  key={i}
+                  onClick={() => setOpt("typewriter", "invert", i)}
+                  className={`flex-1 py-1.5 rounded text-xs font-medium border transition-colors ${
+                    options.typewriter.invert === i
+                      ? "bg-white text-zinc-950 border-white"
+                      : "bg-transparent text-zinc-400 border-zinc-700 hover:border-zinc-500"
+                  }`}
+                >
+                  {i === 0 ? "☀ Normal" : "☾ Inverted"}
+                </button>
+              ))}
+            </div>
           </div>
         );
       case "engraving":
