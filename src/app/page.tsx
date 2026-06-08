@@ -26,7 +26,7 @@ interface StyleOptions {
   hatching: { lineSpacing: number; angle: number; threshold: number };
   crosshatch: { lineSpacing: number };
   spiral: { spacing: number; maxDisplacement: number };
-  typewriter: { cols: number; contrast: number; brightness: number; charSet: number; invert: number };
+  typewriter: { cols: number; contrast: number; brightness: number; charSet: number; invert: number; passes: number };
   engraving: { minSpacing: number; maxSpacing: number };
 }
 
@@ -48,7 +48,7 @@ const defaultOptions: StyleOptions = {
   hatching: { lineSpacing: 8, angle: 45, threshold: 0.7 },
   crosshatch: { lineSpacing: 8 },
   spiral: { spacing: 7, maxDisplacement: 8 },
-  typewriter: { cols: 120, contrast: 20, brightness: 0, charSet: 0, invert: 0 },
+  typewriter: { cols: 100, contrast: 20, brightness: 0, charSet: 0, invert: 0, passes: 2 },
   engraving: { minSpacing: 2, maxSpacing: 18 },
 };
 
@@ -424,9 +424,10 @@ export default function Home() {
       case "typewriter":
         return (
           <div className="flex flex-col gap-3">
-            <SliderRow label="Columns" value={options.typewriter.cols} min={40} max={240} step={4} onChange={(v) => setOpt("typewriter", "cols", v)} />
+            <SliderRow label="Columns" value={options.typewriter.cols} min={40} max={180} step={4} onChange={(v) => setOpt("typewriter", "cols", v)} />
             <SliderRow label="Contrast" value={options.typewriter.contrast} min={-80} max={120} step={2} onChange={(v) => setOpt("typewriter", "contrast", v)} />
             <SliderRow label="Brightness" value={options.typewriter.brightness} min={-60} max={60} step={2} onChange={(v) => setOpt("typewriter", "brightness", v)} />
+            <SliderRow label="Opt. Passes" value={options.typewriter.passes} min={1} max={5} step={1} onChange={(v) => setOpt("typewriter", "passes", v)} />
             <div className="flex flex-col gap-1">
               <span className="text-xs text-zinc-400">Character Set</span>
               <div className="flex flex-wrap gap-1">
